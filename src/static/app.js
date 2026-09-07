@@ -3,6 +3,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const authStatus = document.getElementById("auth-status");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const cancelLoginButton = document.getElementById("cancel-login");
+  let isTeacher = false;
+
+  function updateAuthControls(username) {
+    isTeacher = Boolean(username);
+    authStatus.textContent = isTeacher ? `Teacher: ${username}` : "Student view";
+    loginButton.classList.toggle("hidden", isTeacher);
+    logoutButton.classList.toggle("hidden", !isTeacher);
+    signupForm.classList.toggle("hidden", !isTeacher);
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +45,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isTeacher
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">Remove</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -49,11 +68,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         activitiesList.appendChild(activityCard);
 
-        // Add option to select dropdown
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        activitySelect.appendChild(option);
+        activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+        Object.keys(activities).forEach((activityName) => {
+          const option = document.createElement("option");
+          option.value = activityName;
+          option.textContent = activityName;
+          activitySelect.appendChild(option);
+        });
       });
 
       // Add event listeners to delete buttons
@@ -110,6 +131,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function fetchAuthStatus() {
+    const response = await fetch("/auth/me");
+    const result = await response.json();
+    updateAuthControls(result.username);
+  }
+
+  loginButton.addEventListener("click", () => loginDialog.showModal());
+  cancelLoginButton.addEventListener("click", () => loginDialog.close());
+
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST" });
+    updateAuthControls(null);
+    fetchActivities();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      messageDiv.textContent = result.detail || "Unable to log in";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      return;
+    }
+
+    updateAuthControls(result.username);
+    loginForm.reset();
+    loginDialog.close();
+    fetchActivities();
+  });
+
   // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -156,5 +217,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  fetchAuthStatus().then(fetchActivities);
 });
